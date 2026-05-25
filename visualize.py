@@ -79,11 +79,20 @@ def visualize_symmetries(data_path, model_path, output_html="visual_result.html"
     Run PRS-Net on one preprocessed sample and write to *.html files
     """
     log_path = os.path.splitext(output_html)[0] + ".log"
-    log_lines = []
+    output_dir = os.path.dirname(output_html)
+    log_dir = os.path.dirname(log_path)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    log_file = open(log_path, "w", encoding="utf-8")
 
     def log(message):
         print(message)
-        log_lines.append(str(message))
+        log_file.write(str(message) + "\n")
+        log_file.flush()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -95,6 +104,7 @@ def visualize_symmetries(data_path, model_path, output_html="visual_result.html"
     # Load data
     data = torch.load(data_path, weights_only=False)
     voxels = data["voxels"].float()
+    surface_points = data.get("surface_points")
     voxel_input = voxels.unsqueeze(0).unsqueeze(0).to(device)
     
     # Get raw parameters from network
@@ -109,7 +119,8 @@ def visualize_symmetries(data_path, model_path, output_html="visual_result.html"
         voxels.numpy(),
         reflection_params,
         rotation_params,
-        return_errors=True
+        return_errors=True,
+        surface_points=surface_points.numpy() if surface_points is not None else None
     )
     
     log("-" * 30)
@@ -130,6 +141,17 @@ def visualize_symmetries(data_path, model_path, output_html="visual_result.html"
     log("Candidate Rotation Errors:")
     for j, err in enumerate(errors["rotation"]):
         log(f"  Axis {j}: {err:.6e}")
+    log("Candidate Rotation Diagnostics:")
+    for j, diagnostic in enumerate(errors["rotation_diagnostics"]):
+        failed_angle = diagnostic["first_failed_angle"]
+        failed_angle_text = "None" if failed_angle is None else f"{failed_angle} deg"
+        log(
+            f"  Axis {j}: "
+            f"passed={diagnostic['pass_count']}/{diagnostic['total_count']}, "
+            f"mean={diagnostic['mean_error']:.6e}, "
+            f"max={diagnostic['max_error']:.6e}, "
+            f"first_failed_angle={failed_angle_text}"
+        )
     log("Candidate Rotation Parameters:")
     for j, q in enumerate(rotation_params):
         axis, theta = _quaternion_to_axis_angle(q)
@@ -197,8 +219,7 @@ def visualize_symmetries(data_path, model_path, output_html="visual_result.html"
     log(f"Validation log saved to: {log_path}")
     log("-" * 30)
 
-    with open(log_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(log_lines) + "\n")
+    log_file.close()
 
 # Visualization entrances
 if __name__ == "__main__":

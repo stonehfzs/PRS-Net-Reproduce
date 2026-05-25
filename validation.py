@@ -33,7 +33,7 @@ def calculate_sde(S_voxels, transform_type, params, tree, L=VOXEL_SIZE):
         # Normalize normal vector
         n = params[:3]
         n_norm = np.linalg.norm(n)
-        n_hat = n / n_norm + EPS
+        n_hat = n / (n_norm + EPS)
         d_hat = params[3] / (L * n_norm)
 
         # Find symmetric point: p' = p - 2 * (p · n_hat + d_hat) * n_hat
@@ -71,7 +71,7 @@ def calculate_sde(S_voxels, transform_type, params, tree, L=VOXEL_SIZE):
     return np.mean(normalized_distances**2)
 
 
-def validate_results(voxels, reflection_params, rotation_params, threshold=4e-4, return_errors=False):
+def validate_results(voxels, reflection_params, rotation_params, threshold=4e-4, return_errors=False, surface_points=None):
     """
     Validation following:
         1. SDE error <= threshold
@@ -80,19 +80,25 @@ def validate_results(voxels, reflection_params, rotation_params, threshold=4e-4,
         4. Angle between rotation axes > 30 degrees
     """
     S_voxels = np.argwhere(voxels).astype(float)
-    if len(S_voxels) == 0:
+    if surface_points is not None:
+        S_surface = surface_points.astype(float)
+    else:
+        S_surface = S_voxels
+
+    if len(S_voxels) == 0 or len(S_surface) == 0:
         if return_errors:
-            return [], [], {"reflection": [], "rotation": []}
+            return [], [], {"reflection": [], "rotation": [], "rotation_diagnostics": []}
         return [], []
     
-    errors = {"reflection": [], "rotation": []}
-    tree = cKDTree(S_voxels)
+    errors = {"reflection": [], "rotation": [], "rotation_diagnostics": []}
+    reflection_tree = cKDTree(S_voxels)
+    rotation_tree = cKDTree(S_surface)
 
     # 1. Reflection candidate filtering by SDE.
     reflection_candidates = []
     for i in range(NUM_REFLECTIONS):
         plane_params = reflection_params[i]
-        error = calculate_sde(S_voxels, 'reflection', plane_params, tree)
+        error = calculate_sde(S_voxels, 'reflection', plane_params, reflection_tree)
         errors["reflection"].append(error)
 
         if error < threshold:
@@ -125,23 +131,32 @@ def validate_results(voxels, reflection_params, rotation_params, threshold=4e-4,
         quaternion = rotation_params[j]
         axis = quaternion[1:]
 
-        is_revolution_axis = True
-        accumulated_error = 0
+        angle_errors = []
 
         # A revolution axis should stay symmetric for all tested angles.
         for deg in range(1, 360):
             theta = np.deg2rad(deg)
             rotation_params_at_theta = np.array([theta, axis[0], axis[1], axis[2]])
-            error = calculate_sde(S_voxels, 'rotation', rotation_params_at_theta, tree)
+            error = calculate_sde(S_surface, 'rotation', rotation_params_at_theta, rotation_tree)
+            angle_errors.append(error)
 
-            if error > threshold:
-                is_revolution_axis = False
-                break
+        angle_errors = np.array(angle_errors)
+        passed_angles = angle_errors <= threshold
+        failed_angles = np.where(~passed_angles)[0] + 1
+        pass_count = int(np.sum(passed_angles))
+        average_error = float(np.mean(angle_errors))
+        max_error = float(np.max(angle_errors))
+        first_failed_angle = None if len(failed_angles) == 0 else int(failed_angles[0])
+        is_revolution_axis = pass_count == 359
 
-            accumulated_error += error
-
-        average_error = accumulated_error / 359.0 if is_revolution_axis else error
         errors["rotation"].append(average_error)
+        errors["rotation_diagnostics"].append({
+            "pass_count": pass_count,
+            "total_count": 359,
+            "mean_error": average_error,
+            "max_error": max_error,
+            "first_failed_angle": first_failed_angle,
+        })
 
         if not is_revolution_axis:
             continue
