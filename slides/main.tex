@@ -1,0 +1,420 @@
+\documentclass[UTF8, aspectratio=169, 11pt]{ctexbeamer}
+\usepackage{booktabs}
+\usepackage{fontspec}
+
+%\usefonttheme{serif}
+%\usefonttheme{default}
+\setCJKsansfont{FangZhengKaiTi.ttf}[Path=./, AutoFakeBold=2, AutoFakeSlant=0.2]
+
+\setbeamersize{text margin left=0.5cm, text margin right=0.5cm}
+%----------------------------------------------------------------------------------------
+%	SELECT LAYOUT THEME
+%----------------------------------------------------------------------------------------
+
+%\usetheme{default}
+%\usetheme{AnnArbor}
+%\usetheme{Antibes}
+%\usetheme{Bergen}
+%\usetheme{Berkeley}
+%\usetheme{Berlin}
+%\usetheme{Boadilla}
+%\usetheme{CambridgeUS}
+%\usetheme{Copenhagen}
+%\usetheme{Darmstadt}
+%\usetheme{Dresden}
+%\usetheme{Frankfurt}
+%\usetheme{Goettingen}
+%\usetheme{Hannover}
+%\usetheme{Ilmenau}
+%\usetheme{JuanLesPins}
+%\usetheme{Luebeck}
+\usetheme{Madrid}
+%\usetheme{Malmoe}
+%\usetheme{Marburg}
+%\usetheme{Montpellier}
+%\usetheme{PaloAlto}
+%\usetheme{Pittsburgh}
+%\usetheme{Rochester}
+%\usetheme{Singapore}
+%\usetheme{Szeged}
+%\usetheme{Warsaw}
+
+%----------------------------------------------------------------------------------------
+%	SELECT COLOR THEME
+%----------------------------------------------------------------------------------------
+
+% Beamer comes with a number of color themes that can be applied to any layout theme to change its colors. Uncomment each of these in turn to see how they change the colors of your selected layout theme.
+
+%\usecolortheme{albatross}
+%\usecolortheme{beaver}
+%\usecolortheme{beetle}
+%\usecolortheme{crane}
+%\usecolortheme{dolphin}
+%\usecolortheme{dove}
+%\usecolortheme{fly}
+%\usecolortheme{lily}
+%\usecolortheme{monarca}
+%\usecolortheme{seagull}
+%\usecolortheme{seahorse}
+%\usecolortheme{spruce}
+%\usecolortheme{whale}
+%\usecolortheme{wolverine}
+
+%----------------------------------------------------------------------------------------
+%	SELECT INNER THEME
+%----------------------------------------------------------------------------------------
+
+% Inner themes change the styling of internal slide elements, for example: bullet points, blocks, bibliography entries, title pages, theorems, etc. Uncomment each theme in turn to see what changes it makes to your presentation.
+
+%\useinnertheme{default}
+%\useinnertheme{circles}
+\useinnertheme{rectangles}
+%\useinnertheme{rounded}
+%\useinnertheme{inmargin}
+
+%----------------------------------------------------------------------------------------
+%	SELECT OUTER THEME
+%----------------------------------------------------------------------------------------
+
+% Outer themes change the overall layout of slides, such as: header and footer lines, sidebars and slide titles. Uncomment each theme in turn to see what changes it makes to your presentation.
+
+\useoutertheme{default}
+%\useoutertheme{infolines}
+%\useoutertheme{miniframes}
+%\useoutertheme{smoothbars}
+%\useoutertheme{sidebar}
+%\useoutertheme{split}
+%\useoutertheme{shadow}
+%\useoutertheme{tree}
+%\useoutertheme{smoothtree}
+
+%\setbeamertemplate{footline} % Uncomment this line to remove the footer line in all slides
+%\setbeamertemplate{footline}[page number] % Uncomment this line to replace the footer line in all slides with a simple slide count
+
+%\setbeamertemplate{navigation symbols}{} % Uncomment this line to remove the navigation symbols from the bottom of all slides
+\setlength{\parindent}{2em}
+\setbeamersize{text margin left=1cm, text margin right=1cm}
+\title[]
+{
+	PRS-Net论文复现: 实现逻辑与技术调整
+}
+\author[]
+{
+	孙景昱
+}
+\institute[]
+{
+	中国海洋大学, 海德学院\par
+	Ocean University of China, Haide College
+}
+\date{\today}
+
+
+\begin{document}
+	\begin{frame}
+		\includegraphics[height=1.25cm]{logo.png}
+		\titlepage % Output the title slide, automatically created using the text entered in the PRESENTATION INFORMATION block above
+		
+	\end{frame}
+	\begin{frame}
+		\frametitle{目录}
+		
+		\tableofcontents
+    \end{frame}
+    \section{数学解释}
+	\begin{frame}{损失函数}
+		PRS-Net是一种用于检测3D模型的对称性的无监督学习算法, 其核心算法采用了卷积神经网络(CNN), 损失函数的构造则综合采用了对称距离误差 (Symmetry Distance Error, SDE), 同时采用对称元素(对称平面或对称轴)所表示的矩阵范数作为惩罚项来减少重复对称元素的出现.
+
+        这种构造损失函数的方法通过找到对称点后计算SDE距离实现, 其中大部分计算均可通过PyTorch实现. 
+	\end{frame}
+
+    \begin{frame}{镜面对称的表示}
+        本文主要讨论了两种对称情形: 镜面对称 (Reflection) 和旋转对称 (Rotation), 根据解析几何的知识, 镜面对称的两点应当满足下述条件:
+        \begin{equation}
+            q^{\prime}_i = q_i-2\frac{q_i\cdot n+d}{\|n\|^2}\cdot n,
+        \end{equation}
+        其中$q$为未经变换的点, $q^{\prime}$为经过变换后对应的点, $n$为平面单位法向量, $d$为取定$n$后平面的偏移量.
+    \end{frame}
+
+    \begin{frame}{旋转对称的表示}
+        旋转对称应满足下述条件:
+        \begin{equation}
+            q^{\prime}_j =p\cdot q_j\cdot p^{-1},
+        \end{equation}
+        其中$q$为未经变换的点, $q^{\prime}$为经过变换后对应的点, $p$为旋转操作的四元数. 这种计算方法较矩阵计算更为简洁, 且可以避免万向节锁问题.
+        
+        为方便处理, 这里额外定义四元数的乘法计算, 同时参与运算的$q$和$q^{\prime}$也采用四元数形式表示.
+    \end{frame}
+
+    \begin{frame}{总对称损失函数}
+        根据两种不同对称方式得到的点, 计算如下距离作为单个点的误差:
+        \begin{equation}
+            D_{(i \text{ or } j)}=\min_{o\in O} \|q_{(i \text{ or } j)}-o\|_2,
+        \end{equation}
+        其中$O$表示某个物体表面的点. 这里采用L2范数, 并统一采用距离归一化后的值进行计算, 以保证各个检测物体的损失函数在计算时是等量纲的.
+
+        于是总体对称的损失函数可表示为
+        \begin{equation}
+            L_{sd} = \sum_{k=1}^{3} D_{i}^{k} +\sum_{k=1}^{3} D_{j}^{k}
+        \end{equation}
+        其中$k$表示对称元素的序号.
+    \end{frame}
+
+    \begin{frame}{惩罚项}
+        对于可能重复的对称元素, 将其特征标准化后构成矩阵, 并计算其与单位阵的正交接近程度, 可作为对高度重合的对称元素的惩罚项, 即在一定程度上避免了重复对称元素的得到:
+        \begin{equation}
+            L_r = \|M^{\prime}_i\|_F^2+\|M^{\prime}_i\|_F^2,
+        \end{equation}
+        其中$\|\cdot \|_F$表示Frobenius范数. $M^{\prime}_i=M_iM_i^T-I, M^{\prime}_j=M_jM_j^T-I$分别表示两种对称元素与单位阵的正交接近程度.
+
+        于是总损失函数定义为
+        \begin{equation}
+            L=L_{sd}+w_r\cdot L_r,
+        \end{equation}
+        其中$w_r$表示惩罚项权重参数.
+    \end{frame}
+    \section{技术实现}
+    \begin{frame}{卷积神经网络 (CNN)}
+        本文所用算法是无监督学习, 这主要是因为大多数据通常本身不包含对称信息, 即只需要利用数据本身包含点的对称信息来计算, 极大提高了算法的普适性.
+        
+        这里CNN输入数据大小为$x=(B, 1, 32, 32, 32)$, 表示$B$个物体的体素 (Voxel), 以及空间内是否为实心, 方便后续选取表面点计算单点SDE.
+
+        借助五层卷积层和扁平层, CNN将输入数据$x$转化为64维的向量. 随后利用全连接层分别输出对称平面和对称轴的表示形式.
+    \end{frame}
+    \begin{frame}{数据获取}
+        本次复现采用的是ModelNet40数据, 以对比其与ShapeNet数据的表现. 因此需要构建一个前处理文件以对*.off文件进行处理, 获取表面点的信息并将其转换为CNN可读的*.pt数据:
+        \begin{equation}
+            x_{grid} = s * (x - x_{center}) + c
+        \end{equation}
+        其中$s$为放缩比例, 确保整个物体都落在$32^3$内, $x_{center}$为全部数据点的中心, $c$为$32^3$的中心.
+    \end{frame}
+    \begin{frame}{随机扰动与取样}
+        记上述调整完成后的全体数据为$X$, 则$X\subset 32^3$, 于是有
+        \begin{equation}
+            X^{\prime} = X\cdot R
+        \end{equation}
+        其中$R$为随机旋转矩阵, 以增强学习效果.
+        
+        同时为方便后续计算点与物体表面的SDE, 构造
+        \begin{equation}
+            Q = \{q_k, k=1,\cdots, 1000\}
+        \end{equation}
+        表示物体表面.
+    \end{frame}
+    \begin{frame}{最短距离的预计算}
+        为减少实际训练时间, 这里预计算物体表面到各个点的最小距离, 记作
+        \begin{equation}
+            C(g) = \text{argmin}_{o \in O} ||g - o||_2
+        \end{equation}
+        其中$g$为Voxel坐标.
+
+        最终的*.pt文件中存有Voxels, 表面点坐标和最近的整数坐标点等信息, 以确保后续读取不存在其他问题.
+    \end{frame}
+    \section{验证过程}
+
+    \begin{frame}{候选对称元素的验证}
+        网络输出的结果并不直接作为最终对称元素, 而是先作为候选结果进行验证. 对于每一个候选对称平面或旋转轴, 将物体表面点进行对应的对称变换, 再计算变换后点集与原物体之间的SDE:
+        \begin{equation}
+            E(S,\tau)=\frac{1}{|S|}\sum_{p\in S}\mathrm{dist}(\tau(p),S)^2.
+        \end{equation}
+
+        若误差满足
+        \begin{equation}
+            E(S,\tau)\leq 4\times 10^{-4},
+        \end{equation}
+        则认为该候选对称元素通过验证.
+    \end{frame}
+
+    \begin{frame}{对称平面的验证}
+        对于网络输出的候选平面
+        \begin{equation}
+            P_i=(n_i,d_i),
+        \end{equation}
+        首先计算每个点关于该平面的镜像点:
+        \begin{equation}
+            p^{\prime}=p-2\frac{p\cdot n_i+d_i}{\|n_i\|^2}n_i.
+        \end{equation}
+
+        随后计算镜像后点集与原物体之间的SDE. 若该误差低于阈值, 则认为该平面是一个有效的镜面对称平面.
+    \end{frame}
+
+    \begin{frame}{对称轴的验证}
+        对于网络输出的四元数
+        \begin{equation}
+            q=(w,x,y,z),
+        \end{equation}
+        取其虚部方向作为旋转轴:
+        \begin{equation}
+            a=\frac{(x,y,z)}{\|(x,y,z)\|}.
+        \end{equation}
+
+        随后依次检查该轴在不同旋转角度下的SDE:
+        \begin{equation}
+            \theta=1^\circ,2^\circ,\cdots,359^\circ.
+        \end{equation}
+
+        只有当所有角度下的误差均低于阈值时, 才认为该轴是有效旋转对称轴.
+    \end{frame}
+    \section{复现流程与代码结构}
+
+    \begin{frame}{整体复现流程}
+        本次复现的整体流程如下:
+        \begin{equation*}
+            \text{OFF模型}
+            \rightarrow \text{预处理}
+            \rightarrow \text{CNN预测}
+            \rightarrow \text{损失函数优化}
+            \rightarrow \text{验证与可视化}
+        \end{equation*}
+
+        其中预处理阶段负责生成网络输入和距离查询表, 训练阶段负责无监督优化对称参数, 验证阶段则根据SDE阈值判断候选对称元素是否有效.
+    \end{frame}
+
+    \begin{frame}{代码结构}
+        复现代码结构如下:
+        \begin{table}
+            \centering
+            \begin{tabular}{ll}
+                \toprule
+                文件 & 功能 \\
+                \midrule
+                preprocess.py & 将*.off模型转换为*.pt训练数据 \\
+                dataset.py & 读取预处理后的训练样本 \\
+                model.py & 定义PRS-Net的CNN网络结构 \\
+                loss.py & 定义对称距离损失和正则项 \\
+                train.py & 执行模型训练并保存参数 \\
+                validation.py & 根据SDE验证对称平面和旋转轴 \\
+                visualize.py & 输出候选参数并生成交互式可视化结果 \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+    \end{frame}
+
+    \section{实际复现中的调整}
+
+    \begin{frame}{验证阶段的问题}
+        初始实现中, 两种对称的验证均使用
+        \begin{equation}
+            S_{voxel}=\{g=(x,y,z)\mid V(g)=1\}
+        \end{equation}
+        作为点集, 但Rotation验证需要检查绕某一轴旋转$1^\circ$到$359^\circ$后的误差. 对于离散Voxel点集而言, 连续旋转后的点很难落在原有Voxel点集附近, 因此会人为放大Rotation的SDE.
+
+        这直接导致了有相当部分满足旋转对称的物体无法识别出有效的对称轴, 因此对原有逻辑进行了优化.
+    \end{frame}
+
+    \begin{frame}{验证阶段的调整}
+        为了分别适配两类对称元素, 本次复现最终采用了分离的验证点集:
+        \begin{equation}
+            \begin{cases}
+                \text{Reflection}: S_{voxel},\\
+                \text{Rotation}: Q=\{q_k\}_{k=1}^{1000}.
+            \end{cases}
+        \end{equation}
+
+        即镜面对称继续使用Voxel占据点进行验证, 而旋转对称使用预处理阶段采样得到的1000个表面点进行验证.
+
+        这样可以保留Reflection验证的稳定性, 同时减少Rotation连续角度验证中的离散化误差.
+    \end{frame}
+
+    \begin{frame}{对称轴验证逻辑}
+        对于网络输出的四元数$p=(w,x,y,z)$, 取其虚部方向作为旋转轴:
+        \begin{equation}
+            a=\frac{(x,y,z)}{\|(x,y,z)\|}.
+        \end{equation}
+
+        随后验证该轴在$\theta \in \{1^\circ,2^\circ,\cdots,359^\circ\}$下是否保持对称, 若所有角度下的SDE均满足
+        \begin{equation}
+            E(S,\theta)\leq 4\times 10^{-4},
+        \end{equation}
+        则认为该轴为有效旋转对称轴.
+    \end{frame}
+
+    \section{实验结果与分析}
+
+    \begin{frame}{不同验证方式的对比}
+        这里对vase, bottle, cup, lamp, flower\_pot, plant, stool七种类别的物体数据进行批量验证, 得到如下结果:
+        \begin{table}
+            \centering
+            \begin{tabular}{lcc}
+                \toprule
+                验证方式 & 有效旋转轴样本数 & 有效平面总数 \\
+                \midrule
+                全部使用$S_{voxel}$ & 0 / 140 & 129 \\
+                全部使用$Q$ & 31 / 140 & 15 \\
+                分离验证方式 & 31 / 140 & 131 \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+
+        可以看到, 采用分离验证方式能够在保留对称平面结果的同时, 显著改善对称轴的识别.
+    \end{frame}
+
+    \begin{frame}{旋转类别统计}
+        使用分离验证方式后, 各类别有效旋转轴结果如下:
+        \begin{table}
+            \centering
+            \begin{tabular}{lc}
+                \toprule
+                类别 & 有效旋转轴样本数 \\
+                \midrule
+                bottle & 15 / 20 \\
+                vase & 8 / 20 \\
+                lamp & 6 / 20 \\
+                flower\_pot & 2 / 20 \\
+                cup & 0 / 20 \\
+                plant & 0 / 20 \\
+                stool & 0 / 20 \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+
+        其中bottle和vase数据的旋转轴主要集中在$z$方向, 与物体本身的几何结构基本一致.
+    \end{frame}
+
+    \begin{frame}{主要问题分析}
+        当前复现结果与论文仍存在差距, 主要原因包括:
+        \begin{itemize}
+            \item ModelNet40与论文使用的ShapeNet数据分布不同;
+            \item ModelNet40中并非所有模型都具有严格对称性, 但训练时并未严格挑选;
+            \item 训练阶段只优化网络输出四元数对应的旋转, 而验证阶段要求整根轴在$1^\circ$到$359^\circ$均成立;
+            \item Voxel分辨率为$32^3$, 对连续旋转对称存在一定离散化误差.
+        \end{itemize}
+    \end{frame}
+
+    \section{总结}
+
+    \begin{frame}{复现结论}
+        本次复现基本跑通了PRS-Net从数据处理到结果验证的完整流程:
+        \begin{itemize}
+            \item 将ModelNet40中的off模型整理为网络可直接读取的训练数据;
+            \item 搭建了以3D CNN为主体的参数预测网络;
+            \item 按照论文思路实现了镜面对称和旋转对称的无监督损失;
+            \item 实现了候选对称平面、旋转轴的误差计算与可视化输出;
+            \item 针对Rotation结果长期不通过的问题, 对验证阶段的点集选取进行了调整.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{后续改进方向}
+        从目前结果来看, 后续更值得继续推进的方向主要有:
+        \begin{itemize}
+            \item 换用论文中使用的ShapeNet数据, 减少数据集差异带来的影响;
+            \item 对测试样本进行人工筛选, 避免将本身不具备明显对称性的模型纳入统计;
+            \item 重新设计Rotation部分的训练约束, 使其更接近验证阶段的连续旋转轴判据;
+            \item 尝试更高分辨率的Voxel表示, 减少离散化对SDE计算的影响;
+            \item 对bottle, vase等具有明显旋转对称性的类别单独训练和分析.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{一些问题}
+        1. 两种对称元素完全分开预测会不会效果更好, 即让CNN分别学习两种对称的特征, 加快损失函数收敛的速度.
+        
+        2. 采用ModelNet40的训练数据表明, 部分轴对称的结果的SDE往往能够控制在和$4\times 10^{-4}$同一数量级附近, 但被严格剔除, 这部分的阈值是否可以通过有监督学习的方式得到进一步优化.
+
+        3. 这个模型能否用除了PyTorch以外的其他方式来加速, 现在只用了1000个构造样本, 数量也没有达到论文里的实际数据量级.
+    \end{frame}
+
+    \begin{frame}
+        \centering
+        \Huge 敬请批评指正!
+    \end{frame}
+\end{document}
